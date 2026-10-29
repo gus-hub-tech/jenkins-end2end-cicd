@@ -5,7 +5,7 @@ at the root directory of the repository.
 
 This is a MVC architecture based application where controller returns a page with title and message attributes to the view.
 
-## Execute the application locally and access it using your browser
+## Execute the application on remote server/instance and access it using your browser
 
 Checkout the repo and move to the directory
 
@@ -26,11 +26,8 @@ The above maven target stroes the artifacts to the `target` directory. You can e
 ** Note: To avoid issues with local setup, Java versions and other dependencies, I would recommend the docker way. **
 
 
-### Execute locally (Java 11 needed) and access the application on http://localhost:8080
+### Execute Remote (Java 11 needed) and access the application on http://<ip-address>:9000
 
-```
-java -jar target/spring-boot-web.jar
-```
 
 ### The Docker way
 
@@ -58,13 +55,21 @@ Hardware Recommendations:
    Minimum 2 GB RAM
    2 CPU cores
 sudo apt update && sudo apt install unzip -y
-adduser sonarqube
-wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-10.4.1.88267.zip
-unzip *
-chown -R sonarqube:sonarqube /opt/sonarqube
-chmod -R 775 /opt/sonarqube
-cd /opt/sonarqube/bin/linux-x86-64
-./sonar.sh start
+sudo apt install -y openjdk-21-jdk unzip
+cd /opt
+sudo wget https://binaries.sonarsource.com/Distribution/sonarqube/sonarqube-26.1.0.118079.zip
+sudo unzip sonarqube-26.1.0.118079.zip
+sudo mv sonarqube-26.1.0.118079 sonarqube
+
+
+sudo adduser --system --no-create-home --group --disabled-login sonarqube
+sudo chown -R sonarqube:sonarqube /opt/sonarqube
+
+sudo sysctl -w vm.max_map_count=262144
+echo "vm.max_map_count=262144" | sudo tee /etc/sysctl.d/99-sonarqube.conf
+
+sudo -u sonarqube /opt/sonarqube/bin/linux-x86-64/sonar.sh start
+
 ```
 
 Hurray !! Now you can access the `SonarQube Server` on `http://<ip-address>:9000` 
