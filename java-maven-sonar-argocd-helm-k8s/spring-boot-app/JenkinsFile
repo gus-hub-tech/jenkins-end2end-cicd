@@ -2,7 +2,7 @@ pipeline {
   agent {
     docker {
       image 'abhishekf5/maven-abhishek-docker-agent:v1'
-      args '--user root -e DOCKER_API_VERSION=1.44 -v /var/run/docker.sock:/var/run/docker.sock' // mount Docker socket to access the host's Docker daemon
+      args '--user 104:109 --group-add 110 -e HOME=/tmp -e DOCKER_API_VERSION=1.44 -v /var/run/docker.sock:/var/run/docker.sock' // mount Docker socket to access the host's Docker daemon
     }
   }
   stages {
@@ -24,7 +24,7 @@ pipeline {
         docker {
           image 'maven:3.9-eclipse-temurin-17'
           reuseNode true
-          args '--user root'
+          args '--user 104:109 -e HOME=/tmp'
         }
       }
       environment {
