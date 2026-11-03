@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
       - name: spring-boot-app
-        image: gustavdhub/ultimate-cicd:24
+        image: gustavdhub/ultimate-cicd:25
         ports:
         - containerPort: 8080
