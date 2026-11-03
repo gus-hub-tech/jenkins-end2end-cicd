@@ -1,0 +1,15 @@
+appName: spring-boot-app
+
+replicaCount: 2
+
+image:
+  repository: gustavdhub/ultimate-cicd
+  tag: "24"
+  pullPolicy: IfNotPresent
+
+containerPort: 8080
+
+service:
+  type: NodePort
+  port: 80
+  targetPort: 8080
