@@ -3,4 +3,4 @@ name: spring-boot-app
 description: Helm chart for the spring-boot-demo application
 type: application
 version: 0.1.0
-appVersion: 28
+appVersion: 29
