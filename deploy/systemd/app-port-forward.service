@@ -1,0 +1,17 @@
+[Unit]
+Description=Spring Boot app port-forward (0.0.0.0:8082 -> svc/spring-boot-app-service:80)
+After=network-online.target minikube.service
+Wants=network-online.target minikube.service
+
+[Service]
+Type=simple
+User=ubuntu
+Environment=HOME=/home/ubuntu
+Environment=KUBECONFIG=/home/ubuntu/.kube/config
+ExecStart=/usr/local/bin/kubectl port-forward svc/spring-boot-app-service -n spring-boot-app 8082:80 --address 0.0.0.0
+Restart=always
+RestartSec=5
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

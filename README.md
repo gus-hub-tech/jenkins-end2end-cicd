@@ -1,137 +1,169 @@
-# Jenkins-Zero-To-Hero
+# Jenkins End-to-End CI/CD
 
-Are you looking forward to learn Jenkins right from Zero(installation) to Hero(Build end to end pipelines)? then you are at the right place. 
+A working Jenkins pipeline for a Spring Boot Java application: Maven build, SonarQube analysis, Docker image push, Helm chart update, and Argo CD deployment to minikube.
 
-## Installation on EC2 Instance
+This repository is a fork of [iam-veeramalla/Jenkins-Zero-To-Hero](https://github.com/iam-veeramalla/Jenkins-Zero-To-Hero). The active pipeline lives under `java-maven-sonar-argocd-helm-k8s/`.
 
-YouTube Video ->
-https://www.youtube.com/watch?v=zZfhAXfBvVA&list=RDCMUCnnQ3ybuyFdzvgv2Ky5jnAA&index=1
+## Architecture
 
-
-![Screenshot 2023-02-01 at 5 46 14 PM](https://user-images.githubusercontent.com/43399466/216040281-6c8b89c3-8c22-4620-ad1c-8edd78eb31ae.png)
-
-Install Jenkins, configure Docker as agent, set up cicd, deploy applications to k8s and much more.
-
-## AWS EC2 Instance
-
-- Go to AWS Console
-- Instances(running)
-- Launch instances
-
-<img width="994" alt="Screenshot 2023-02-01 at 12 37 45 PM" src="https://user-images.githubusercontent.com/43399466/215974891-196abfe9-ace0-407b-abd2-adcffe218e3f.png">
-
-### Install Jenkins.
-
-Pre-Requisites:
- - Java (JDK)
-
-### Run the below commands to install Java and Jenkins
-
-Install Java
-
-```
-sudo apt update
-sudo apt install openjdk-21-jre
+```text
+GitHub main
+    |
+    v
+Jenkins (Docker agent)
+    |-- mvn clean package
+    |-- SonarQube analysis
+    |-- docker build/push gustavdhub/ultimate-cicd:<BUILD_NUMBER>
+    |-- commit updated Helm chart tag to main
+    v
+GitHub main (chart tag)
+    |
+    v
+Argo CD (auto-sync) --> minikube --> Deployment/Service (spring-boot-app)
 ```
 
-Verify Java is Installed
+## Current demo deployment
 
-```
-java -version
-```
+| Component | URL | Notes |
+| --- | --- | --- |
+| Jenkins | http://15.240.98.85:8080 | Login required |
+| Argo CD | https://15.240.98.85:8081 | Self-signed certificate |
+| Spring Boot app | http://15.240.98.85:8082 | Port-forward to the service |
+| SonarQube | http://15.240.98.85:9000 | Analysis server |
 
-Now, you can proceed with installing Jenkins
+The public address is an Elastic IP. Substitute your own host/IP if you rebuild the environment. The app is also reachable on the host at `http://192.168.49.2:32208` through the minikube NodePort.
 
-```
-sudo wget -O /usr/share/keyrings/jenkins-keyring.asc \
-  https://pkg.jenkins.io/debian/jenkins.io-2026.key
+## Repository layout
 
-echo "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian binary/" | \
-  sudo tee /etc/apt/sources.list.d/jenkins.list > /dev/null
+Active pipeline:
 
-sudo apt-get update
-sudo apt-get install jenkins
-```
+- `java-maven-sonar-argocd-helm-k8s/spring-boot-app/` — Spring Boot app and `JenkinsFile`
+- `java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/` — Helm chart (single source of truth for the deployment)
+- `java-maven-sonar-argocd-helm-k8s/Argo CD/application.yaml` — Argo CD `Application`
+- `deploy/systemd/` — systemd units for SonarQube, minikube, and the port-forwards
+- `deploy/README.md` — host unit installation and verification
 
-**Note: ** By default, Jenkins will not be accessible to the external world due to the inbound traffic restriction by AWS. Open port 8080 in the inbound traffic rules as show below.
+Examples from the upstream repository (not part of this pipeline):
 
-- EC2 > Instances > Click on <Instance-ID>
-- In the bottom tabs -> Click on Security
-- Security groups
-- Add inbound traffic rules as shown in the image (you can just allow TCP 8080 as well, in my case, I allowed `All traffic`).
+- `my-first-pipeline/`, `multi-stage-multi-agent/`, `shared-libraries/`, `vars/`, `python-jenkins-argocd-k8s/`, `Interview_Questions.md`
 
-<img width="1187" alt="Screenshot 2023-02-01 at 12 42 01 PM" src="https://user-images.githubusercontent.com/43399466/215975712-2fc569cb-9d76-49b4-9345-d8b62187aa22.png">
+## Pipeline stages
 
+The Jenkins job is a **Pipeline script from SCM**:
 
-### Login to Jenkins using the below URL:
+- SCM: `https://github.com/gus-hub-tech/jenkins-end2end-cicd.git`
+- Branch: `main`
+- Script path: `java-maven-sonar-argocd-helm-k8s/spring-boot-app/JenkinsFile`
 
-http://<ec2-instance-public-ip-address>:8080    [You can get the ec2-instance-public-ip-address from your AWS EC2 console page]
+Stages:
 
-Note: If you are not interested in allowing `All Traffic` to your EC2 instance
-      1. Delete the inbound traffic rule for your instance
-      2. Edit the inbound traffic rule to only allow custom TCP port `8080`
-  
-After you login to Jenkins, 
-      - Run the command to copy the Jenkins Admin Password - `sudo cat /var/lib/jenkins/secrets/initialAdminPassword`
-      - Enter the Administrator password
-      
-<img width="1291" alt="Screenshot 2023-02-01 at 10 56 25 AM" src="https://user-images.githubusercontent.com/43399466/215959008-3ebca431-1f14-4d81-9f12-6bb232bfbee3.png">
+1. **Build and Test** — `mvn clean package` in `spring-boot-app`.
+2. **Static Code Analysis** — SonarQube Maven scanner against `SONAR_URL`.
+3. **Build and Push Docker Image** — builds and pushes `gustavdhub/ultimate-cicd:${BUILD_NUMBER}`.
+4. **Update Helm Chart** — updates `values.yaml` (`tag`) and `Chart.yaml` (`appVersion`), commits, and pushes to `main`.
 
-### Click on Install suggested plugins
+Checkout is implicit: Jenkins checks out the configured branch before running the pipeline.
 
-<img width="1291" alt="Screenshot 2023-02-01 at 10 58 40 AM" src="https://user-images.githubusercontent.com/43399466/215959294-047eadef-7e64-4795-bd3b-b1efb0375988.png">
+## Jenkins parameters
 
-Wait for the Jenkins to Install suggested plugins
+| Parameter | Default | Purpose |
+| --- | --- | --- |
+| `SONAR_URL` | `http://10.0.1.163:9000` | SonarQube URL reachable from the Docker agent |
+| `DOCKER_UID` | `104` | UID for the Docker agent (host `jenkins` UID) |
+| `DOCKER_GID` | `109` | GID for the Docker agent (host `jenkins` GID) |
+| `DOCKER_GROUP_GID` | `110` | GID of the host `docker` group |
 
-<img width="1291" alt="Screenshot 2023-02-01 at 10 59 31 AM" src="https://user-images.githubusercontent.com/43399466/215959398-344b5721-28ec-47a5-8908-b698e435608d.png">
+Use `id jenkins` and `getent group docker` to confirm the values on your host. The defaults match the demo host.
 
-Create First Admin User or Skip the step [If you want to use this Jenkins instance for future use-cases as well, better to create admin user]
+## Jenkins credentials
 
-<img width="990" alt="Screenshot 2023-02-01 at 11 02 09 AM" src="https://user-images.githubusercontent.com/43399466/215959757-403246c8-e739-4103-9265-6bdab418013e.png">
+Create these in **Manage Jenkins > Credentials > System > Global credentials**:
 
-Jenkins Installation is Successful. You can now starting using the Jenkins 
+| ID | Type | Used for |
+| --- | --- | --- |
+| `sonarqube` | Secret text | SonarQube user token (`SONAR_AUTH_TOKEN`) |
+| `docker-cred` | Username with password | Docker Hub push |
+| `github` | Secret text | GitHub PAT with `repo` scope (`GITHUB_TOKEN`) |
 
-<img width="990" alt="Screenshot 2023-02-01 at 11 14 13 AM" src="https://user-images.githubusercontent.com/43399466/215961440-3f13f82b-61a2-4117-88bc-0da265a67fa7.png">
+Do not commit tokens, passwords, or kubeconfigs.
 
-## Install the Docker Pipeline plugin in Jenkins:
+## Prerequisites
 
-   - Log in to Jenkins.
-   - Go to Manage Jenkins > Manage Plugins.
-   - In the Available tab, search for "Docker Pipeline".
-   - Select the plugin and click the Install button.
-   - Restart Jenkins after the plugin is installed.
-   
-<img width="1392" alt="Screenshot 2023-02-01 at 12 17 02 PM" src="https://user-images.githubusercontent.com/43399466/215973898-7c366525-15db-4876-bd71-49522ecb267d.png">
+- An Ubuntu EC2 instance with Docker and Jenkins.
+- A SonarQube server (Java 17+; the demo uses Java 21) with `vm.max_map_count=262144`.
+- minikube with the Docker driver (8 GiB / 3 CPU is enough for this demo).
+- Argo CD installed in the `argocd` namespace from the official install manifests.
+- Helm is not required on the host; Argo CD renders the chart.
+- Security group ports: `22`, `8080`, `8081`, `8082`, `9000` (and `80`/`443` if needed).
 
-Wait for the Jenkins to be restarted.
+## SonarQube
 
+Install SonarQube under `/opt/sonarqube` and run it as the `sonarqube` user. The repository includes the systemd unit:
 
-## Docker Slave Configuration
-
-Run the below command to Install Docker
-
-```
-sudo apt update
-sudo apt install docker.io
-```
- 
-### Grant Jenkins user and Ubuntu user permission to docker deamon.
-
-```
-sudo su - 
-usermod -aG docker jenkins
-usermod -aG docker ubuntu
-systemctl restart docker
+```bash
+sudo cp deploy/systemd/sonarqube.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now sonarqube.service
 ```
 
-Once you are done with the above steps, it is better to restart Jenkins.
+Set the kernel parameter required by SonarQube's Elasticsearch:
 
+```bash
+echo 'vm.max_map_count=262144' | sudo tee /etc/sysctl.d/99-sonarqube.conf
+sudo sysctl --system
 ```
-http://<ec2-instance-public-ip>:8080/restart
+
+See `java-maven-sonar-argocd-helm-k8s/spring-boot-app/README.md` for the manual install steps.
+
+## minikube and port-forwards
+
+```bash
+minikube start --driver=docker --memory=8192 --cpus=3
+sudo cp deploy/systemd/minikube.service deploy/systemd/argocd-port-forward.service deploy/systemd/app-port-forward.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now minikube.service argocd-port-forward.service app-port-forward.service
 ```
 
-The docker agent configuration is now successful.
+The port-forwards expose:
 
+- `8081` → `svc/argocd-server:443` in `argocd`
+- `8082` → `svc/spring-boot-app-service:80` in `spring-boot-app`
 
+## Argo CD
 
+Apply the `Application` after Argo CD is installed:
 
+```bash
+kubectl apply -f "java-maven-sonar-argocd-helm-k8s/Argo CD/application.yaml"
+```
+
+The app uses automated sync with prune and self-heal, and creates the `spring-boot-app` namespace if needed.
+
+Retrieve the initial Argo CD admin password with:
+
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+```
+
+## Operations
+
+```bash
+systemctl status docker jenkins sonarqube minikube argocd-port-forward app-port-forward
+kubectl -n argocd get pods
+kubectl -n argocd get application spring-boot-app
+kubectl -n spring-boot-app get pods
+```
+
+After a host reboot the units start in this order: Docker → minikube → port-forwards; SonarQube starts after the network. Jenkins starts independently. The port-forward units use `Restart=always`.
+
+## Notes and limitations
+
+- The demo app's page content is static; a build changes the image tag (`:25`, `:26`, ...), not the rendered text. Edit `StartApplication.java` or `index.html` if you want a visible change.
+- There are no unit tests in the app; `mvn clean package` builds the artifact and runs any tests that are added.
+- The Helm chart is the single source of truth. The legacy raw manifests were removed so Jenkins and Argo CD cannot drift.
+- The `SONAR_URL` default points at the demo host's private IP. Change the parameter when moving to another host.
+- The deployment is intended for a demo; use a managed Kubernetes cluster, TLS, and restricted security groups for production.
+
+## License and credits
+
+See `LICENSE`. Based on [iam-veeramalla/Jenkins-Zero-To-Hero](https://github.com/iam-veeramalla/Jenkins-Zero-To-Hero).

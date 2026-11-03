@@ -2,20 +2,19 @@ pipeline {
   agent {
     docker {
       image 'abhishekf5/maven-abhishek-docker-agent:v1'
-      args '--user 104:109 --group-add 110 -e HOME=/tmp -e DOCKER_API_VERSION=1.44 -v /var/run/docker.sock:/var/run/docker.sock' // mount Docker socket to access the host's Docker daemon
+      args "--user ${params.DOCKER_UID}:${params.DOCKER_GID} --group-add ${params.DOCKER_GROUP_GID} -e HOME=/tmp -e DOCKER_API_VERSION=1.44 -v /var/run/docker.sock:/var/run/docker.sock"
     }
   }
+  parameters {
+    string(name: 'SONAR_URL', defaultValue: 'http://10.0.1.163:9000', description: 'SonarQube base URL reachable from the Jenkins Docker agent')
+    string(name: 'DOCKER_UID', defaultValue: '104', description: 'UID for the Docker agent (host jenkins UID)')
+    string(name: 'DOCKER_GID', defaultValue: '109', description: 'GID for the Docker agent (host jenkins GID)')
+    string(name: 'DOCKER_GROUP_GID', defaultValue: '110', description: 'GID of the host docker group')
+  }
   stages {
-    stage('Checkout') {
-      steps {
-        sh 'echo passed'
-        //git branch: 'main', url: 'https://github.com/gus-hub-tech/jenkins-end2end-cicd.git'
-      }
-    }
     stage('Build and Test') {
       steps {
         sh 'ls -ltr'
-        // build the project and create a JAR file
         sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && mvn clean package'
       }
     }
@@ -24,11 +23,11 @@ pipeline {
         docker {
           image 'maven:3.9-eclipse-temurin-17'
           reuseNode true
-          args '--user 104:109 -e HOME=/tmp'
+          args "--user ${params.DOCKER_UID}:${params.DOCKER_GID} -e HOME=/tmp"
         }
       }
       environment {
-        SONAR_URL = "http://10.0.1.163:9000"
+        SONAR_URL = "${params.SONAR_URL}"
       }
       steps {
         withCredentials([string(credentialsId: 'sonarqube', variable: 'SONAR_AUTH_TOKEN')]) {
@@ -39,38 +38,36 @@ pipeline {
     stage('Build and Push Docker Image') {
       environment {
         DOCKER_IMAGE = "gustavdhub/ultimate-cicd:${BUILD_NUMBER}"
-        // DOCKERFILE_LOCATION = "java-maven-sonar-argocd-helm-k8s/spring-boot-app/Dockerfile"
       }
       steps {
         script {
-            sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && docker build -t ${DOCKER_IMAGE} .'
-            def dockerImage = docker.image("${DOCKER_IMAGE}")
-            docker.withRegistry('https://index.docker.io/v1/', "docker-cred") {
-                dockerImage.push()
-            }
+          sh 'cd java-maven-sonar-argocd-helm-k8s/spring-boot-app && docker build -t ${DOCKER_IMAGE} .'
+          def dockerImage = docker.image("${DOCKER_IMAGE}")
+          docker.withRegistry('https://index.docker.io/v1/', "docker-cred") {
+            dockerImage.push()
+          }
         }
       }
     }
-    stage('Update Deployment File') {
-        environment {
-            GIT_REPO_NAME = "jenkins-end2end-cicd"
-            GIT_USER_NAME = "gus-hub-tech"
+    stage('Update Helm Chart') {
+      environment {
+        GIT_REPO_NAME = "jenkins-end2end-cicd"
+        GIT_USER_NAME = "gus-hub-tech"
+      }
+      steps {
+        withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+          sh '''
+            git config user.email "gustav.kiewiets@hotmail.com"
+            git config user.name "Gustav Kiewiets"
+            BUILD_NUMBER=${BUILD_NUMBER}
+            sed -i -E "s#^  tag:.*#  tag: ${BUILD_NUMBER}#" java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/values.yaml
+            sed -i -E "s#^appVersion:.*#appVersion: ${BUILD_NUMBER}#" java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/Chart.yaml
+            git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/values.yaml java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/Chart.yaml
+            git commit -m "Update Helm chart image tag to version ${BUILD_NUMBER}"
+            git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+          '''
         }
-        steps {
-            withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
-                sh '''
-                    git config user.email "gustav.kiewiets@hotmail.com"
-                    git config user.name "Gustav Kiewiets"
-                    BUILD_NUMBER=${BUILD_NUMBER}
-                    sed -i -E "s#image: gustavdhub/ultimate-cicd:.*#image: gustavdhub/ultimate-cicd:${BUILD_NUMBER}#" java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml
-                    sed -i -E "s#^  tag:.*#  tag: \"${BUILD_NUMBER}\"#" java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/values.yaml
-                    sed -i -E "s#^appVersion:.*#appVersion: \"${BUILD_NUMBER}\"#" java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/Chart.yaml
-                    git add java-maven-sonar-argocd-helm-k8s/spring-boot-app-manifests/deployment.yml java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/values.yaml java-maven-sonar-argocd-helm-k8s/spring-boot-app-chart/Chart.yaml
-                    git commit -m "Update deployment image to version ${BUILD_NUMBER}"
-                    git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
-                '''
-            }
-        }
+      }
     }
   }
 }

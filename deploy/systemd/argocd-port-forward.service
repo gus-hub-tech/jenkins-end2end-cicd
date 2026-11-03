@@ -1,0 +1,17 @@
+[Unit]
+Description=Argo CD UI port-forward (0.0.0.0:8081 -> svc/argocd-server:443)
+After=network-online.target minikube.service
+Wants=network-online.target minikube.service
+
+[Service]
+Type=simple
+User=ubuntu
+Environment=HOME=/home/ubuntu
+Environment=KUBECONFIG=/home/ubuntu/.kube/config
+ExecStart=/usr/local/bin/kubectl port-forward svc/argocd-server -n argocd 8081:443 --address 0.0.0.0
+Restart=always
+RestartSec=5
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

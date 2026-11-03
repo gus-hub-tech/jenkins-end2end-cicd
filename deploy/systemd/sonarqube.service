@@ -1,0 +1,21 @@
+[Unit]
+Description=SonarQube Server
+Documentation=https://docs.sonarsource.com/sonarqube-server/
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+User=sonarqube
+Group=sonarqube
+PIDFile=/opt/sonarqube/bin/linux-x86-64/SonarQube.pid
+ExecStart=/opt/sonarqube/bin/linux-x86-64/sonar.sh start
+ExecStop=/opt/sonarqube/bin/linux-x86-64/sonar.sh stop
+Restart=on-failure
+RestartSec=15
+TimeoutStartSec=300
+TimeoutStopSec=300
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

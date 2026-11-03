@@ -1,0 +1,22 @@
+[Unit]
+Description=minikube single-node Kubernetes (docker driver)
+Documentation=https://minikube.sigs.k8s.io/
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=ubuntu
+Group=ubuntu
+Environment=HOME=/home/ubuntu
+Environment=KUBECONFIG=/home/ubuntu/.kube/config
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/bin/minikube start --driver=docker --memory=8192 --cpus=3
+ExecStop=/usr/local/bin/minikube stop
+TimeoutStartSec=600
+TimeoutStopSec=300
+
+[Install]
+WantedBy=multi-user.target
